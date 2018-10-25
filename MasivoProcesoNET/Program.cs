@@ -134,7 +134,6 @@ namespace MasivoProcesoNET
             Console.WriteLine("Buscando archivos...");
             message.AppendLine("Buscando archivos...");
             List<Thread> workerThreads = new List<Thread>();
-            List<Thread> workerThreadsToDelete = new List<Thread>();
 
             try
             {
@@ -153,19 +152,6 @@ namespace MasivoProcesoNET
 
                 if (_numberFilesdownloaded != 0)
                 {
-                    Console.WriteLine("---Eliminacion de archivos remotos---");
-                    message.AppendLine("---Eliminacion de archivos remotos---");
-                    foreach (ImssFile ifile in filesDownloaded)
-                    {
-                        Thread thread = new Thread(() => deleteFile(ifile.Fullname));
-                        workerThreadsToDelete.Add(thread);
-                        thread.Start();
-                    }
-
-                    foreach (Thread thread in workerThreadsToDelete)
-                    {
-                        thread.Join();
-                    }
                     Console.WriteLine("---Respaldo de archivos descargados---");
                     message.AppendLine("---Respaldo de archivos descargados---");
                     copyFiles();
@@ -201,7 +187,6 @@ namespace MasivoProcesoNET
                 filesDownloaded.Clear();
                 message.Clear();
                 workerThreads = null;
-                workerThreadsToDelete = null;
                 _numberFilesdownloaded = 0;
             }
         }
@@ -237,37 +222,11 @@ namespace MasivoProcesoNET
                     sftpclient.Disconnect();
                 }
             }
-            catch (Exception e)
+            catch (Exception exp)
             {
                 StringBuilder sb = new StringBuilder();
-                Console.WriteLine("Error downloadFile:[{0}]", e.Message);
-                sb.AppendFormat("Error downloadFile:[{0}]", e.Message);
-                Logger.WriteEventViewer(sb.ToString(), EventLogEntryType.Error);
-            }
-        }
-
-        private static void deleteFile(string pathRemoteFileToDelete)
-        {
-            try
-            {
-                using (SftpClient sftpclient = new SftpClient(
-                        _sftServer, _port, _userName, _password))
-                {
-                    sftpclient.Connect();
-                    if (sftpclient.Exists(pathRemoteFileToDelete))
-                    {
-                        sftpclient.DeleteFile(pathRemoteFileToDelete);
-                        Console.WriteLine("\tArchivo eliminado: [{0}]", pathRemoteFileToDelete);
-                        message.AppendFormat("\tArchivo eliminado: [{0}]\n", pathRemoteFileToDelete);
-                    }
-                    sftpclient.Disconnect();
-                }
-            }
-            catch (Exception e)
-            {
-                StringBuilder sb = new StringBuilder();
-                Console.WriteLine("Error deleteFile: [{0}]", pathRemoteFileToDelete);
-                sb.AppendFormat("Error deleteFile:[{0}]", e.Message);
+                Console.WriteLine("Error downloadFile:[{0}]", exp.Message);
+                sb.AppendFormat("Error downloadFile:[{0}]", exp.Message);
                 Logger.WriteEventViewer(sb.ToString(), EventLogEntryType.Error);
             }
         }
@@ -294,11 +253,11 @@ namespace MasivoProcesoNET
                 Console.WriteLine("\t\nOcurrio un error al respaldar Archivo.\t\nError copyFiles: Directorio no existe[{0}]", ex.Message);
                 Logger.WriteEventViewer("\t\nOcurrio un error al respaldar Archivo.\t\nError copyFiles: Directorio no existe [" + ex.Message + "]", EventLogEntryType.Error);
             }
-            catch (Exception ex)
+            catch (Exception exept)
             {
                 StringBuilder sb = new StringBuilder();
-                Console.WriteLine("\t\nError copyFiles:[{0}]", ex.Message);
-                sb.AppendFormat("Error copyFiles:[{0}]", ex.Message);
+                Console.WriteLine("\t\nError copyFiles:[{0}]", exept.Message);
+                sb.AppendFormat("Error copyFiles:[{0}]", exept.Message);
                 Logger.WriteEventViewer(sb.ToString(), EventLogEntryType.Error);
             }
         }
