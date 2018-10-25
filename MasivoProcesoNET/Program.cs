@@ -40,9 +40,7 @@ namespace MasivoProcesoNET
             try
             {
                 ReadConfigurationFile();
-                OnTimedEvent(null, null);
-                SetTimer();
-                Console.ReadLine();
+                OnTimedEvent();
             }
             catch (Exception ex)
             {
@@ -76,6 +74,7 @@ namespace MasivoProcesoNET
             {
                 StringBuilder sb = new StringBuilder();
                 sb.AppendFormat("Error ReadConfigurationFile:[{0}]\n[{1}]", configurationEvent.ToString(), ex.Message);
+                Console.WriteLine(sb.ToString());
                 Logger.WriteEventViewer(sb.ToString(), EventLogEntryType.Error);
             }
         }
@@ -107,17 +106,7 @@ namespace MasivoProcesoNET
             return obj;
         }
 
-        private static void SetTimer()
-        {
-            if (_monitoring_Frequency < minimumFrecuency)
-                _monitoring_Frequency = minimumFrecuency;
-            aTimer = new System.Timers.Timer(_monitoring_Frequency);
-            aTimer.Elapsed += OnTimedEvent;
-            aTimer.AutoReset = true;
-            aTimer.Enabled = true;
-        }
-
-        private static void OnTimedEvent(Object source, ElapsedEventArgs e)
+        private static void OnTimedEvent()
         {
             Console.Write("\n\ninicia validación de archivos en los servidores SFTP del IMSS\n");
             message.AppendLine("inicia validación de archivos en los servidores SFTP del IMSS");
@@ -129,6 +118,8 @@ namespace MasivoProcesoNET
             message.AppendLine("Puerto:[" + _port + "]");
             Console.WriteLine("Direccion remota:[{0}]", _remoteFolder_IMSS);
             message.AppendLine("Direccion remota:[" + _remoteFolder_IMSS + "]");
+            Console.WriteLine("Numero de entidades:[{0}]", _numberOfEntities);
+            message.AppendLine("Numero de entidades:[" + _numberOfEntities + "]");
             Console.WriteLine("Direccion local:[{0}]", _localStorageFolder_BAZ);
             message.AppendLine("Direccion local:[" + _localStorageFolder_BAZ + "]");
             Console.WriteLine("Buscando archivos...");
@@ -160,11 +151,16 @@ namespace MasivoProcesoNET
                     message.AppendLine("---Renombrado de archivos descargados---");
                     foreach (ImssFile currentFile in filesDownloaded)
                     {
-                        string tmp = Path.GetFileNameWithoutExtension(currentFile.Name);
-                        File.Move(_localStorageFolder_BAZ + currentFile.Name, _localStorageFolder_BAZ + tmp + ".cif");
+                        string newfile = Path.GetFileNameWithoutExtension(currentFile.Name) + ".cif";
+                        string tmp = string.Concat(_localStorageFolder_BAZ + newfile);
+                        if (!File.Exists(tmp))
+                            {
+                            File.Move(_localStorageFolder_BAZ + currentFile.Name, tmp);
+                            Console.Write("\tNuevo archivo renombrado[{0}].\n", tmp);
+                            message.AppendLine("\tNuevo archivo renombrado: ["+ tmp + "].");
+                            }
                     }
-                    Console.Write("\tSe completo el renombrado de archivos.\n");
-                    message.AppendLine("\tSe completo el renombrado de archivos.");
+                    
 
                 }
                 else
@@ -199,16 +195,13 @@ namespace MasivoProcesoNET
                         _sftServer, _port, _userName, _password))
                 {
                     sftpclient.Connect();
-                    Console.WriteLine("Directorio actual [{0}]", currentRemoteDirectory);
                     var files = sftpclient.ListDirectory(currentRemoteDirectory);
                     foreach (var file in files)
                     {
-                        Console.WriteLine("Archivo actual [{0}]", file.Name);
                         if (!file.Name.StartsWith("."))
                         {
                             string remoteFileName = file.Name;
                             if (!file.Name.StartsWith("."))
-
                                 using (Stream file1 = File.OpenWrite(_localStorageFolder_BAZ + remoteFileName))
                                 {
                                     sftpclient.DownloadFile(currentRemoteDirectory + remoteFileName, file1);
