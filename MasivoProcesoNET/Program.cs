@@ -70,7 +70,7 @@ namespace MasivoProcesoNET
                 _backupFolder = (string)ReadConfiguration("backupFolder", false);
                 _monitoring_Frequency = (Int32)ReadConfiguration("monitoring_Frequency", true);
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 StringBuilder sb = new StringBuilder();
                 sb.AppendFormat("Error ReadConfigurationFile:[{0}]\n[{1}]", configurationEvent.ToString(), ex.Message);
@@ -131,7 +131,7 @@ namespace MasivoProcesoNET
                 for (int j = 1; j <= _numberOfEntities; j++)
                 {
                     string currentRemoteDirectory = _remoteFolder_IMSS.Replace("##", j.ToString("D2"));
-                    Thread thread = new Thread(() => downloadFile(currentRemoteDirectory));
+                    Thread thread = new Thread(() => download(currentRemoteDirectory));
                     workerThreads.Add(thread);
                     thread.Start();
                 }
@@ -154,14 +154,17 @@ namespace MasivoProcesoNET
                         string newfile = Path.GetFileNameWithoutExtension(currentFile.Name) + ".cif";
                         string tmp = string.Concat(_localStorageFolder_BAZ + newfile);
                         if (!File.Exists(tmp))
-                            {
+                        {
                             File.Move(_localStorageFolder_BAZ + currentFile.Name, tmp);
                             Console.Write("\tNuevo archivo renombrado[{0}].\n", tmp);
-                            message.AppendLine("\tNuevo archivo renombrado: ["+ tmp + "].");
-                            }
+                            message.AppendLine("\tNuevo archivo renombrado: [" + tmp + "].");
+                        }
+                        else
+                        {
+                            Console.Write("\tEl archivo ya existe: [{0}].\n", tmp);
+                            message.AppendLine("\tEl archivo ya existe: [" + tmp + "].");
+                        }
                     }
-                    
-
                 }
                 else
                 {
@@ -187,7 +190,7 @@ namespace MasivoProcesoNET
             }
         }
 
-        private static void downloadFile(string currentRemoteDirectory)
+        private static void download(string currentRemoteDirectory)
         {
             try
             {
@@ -195,31 +198,54 @@ namespace MasivoProcesoNET
                         _sftServer, _port, _userName, _password))
                 {
                     sftpclient.Connect();
-                    var files = sftpclient.ListDirectory(currentRemoteDirectory);
-                    foreach (var file in files)
+                    if (sftpclient.Exists(currentRemoteDirectory))
                     {
-                        if (!file.Name.StartsWith("."))
+                        var files = sftpclient.ListDirectory(currentRemoteDirectory);
+                        foreach (var file in files)
                         {
-                            string remoteFileName = file.Name;
-                            if (!file.Name.StartsWith("."))
-                                using (Stream file1 = File.OpenWrite(_localStorageFolder_BAZ + remoteFileName))
-                                {
-                                    sftpclient.DownloadFile(currentRemoteDirectory + remoteFileName, file1);
-                                    filesDownloaded.Add(new ImssFile(remoteFileName, file.FullName, file.Length));
-                                    _numberFilesdownloaded++;
-                                    Console.WriteLine("Archivo descargado: [{0}]", remoteFileName);
-                                    message.AppendFormat("Archivo descargado: [{0}]\n", remoteFileName);
-                                }
+                            downloadFile(sftpclient, file, currentRemoteDirectory);
                         }
+                        sftpclient.Disconnect();
                     }
-                    sftpclient.Disconnect();
+                    else
+                    {
+                        Console.Write("\tEl directorio remoto no existe: [{0}].\n", currentRemoteDirectory);
+                        message.AppendLine("\tEl directorio remoto no existe:: [" + currentRemoteDirectory + "].");
+                    }
                 }
             }
             catch (Exception exp)
             {
                 StringBuilder sb = new StringBuilder();
-                Console.WriteLine("Error downloadFile:[{0}]", exp.Message);
-                sb.AppendFormat("Error downloadFile:[{0}]", exp.Message);
+                Console.WriteLine("Error download:[{0}]", exp.Message);
+                sb.AppendFormat("Error download:[{0}]", exp.Message);
+                Logger.WriteEventViewer(sb.ToString(), EventLogEntryType.Error);
+            }
+        }
+
+        private static void downloadFile(SftpClient sftpclient, SftpFile file, string currentRemoteDirectory)
+        {
+            try
+            {
+                if (!file.Name.StartsWith("."))
+                {
+                    string remoteFileName = file.Name;
+                    if (!file.Name.StartsWith("."))
+                        using (Stream file1 = File.OpenWrite(_localStorageFolder_BAZ + remoteFileName))
+                        {
+                            sftpclient.DownloadFile(currentRemoteDirectory + remoteFileName, file1);
+                            filesDownloaded.Add(new ImssFile(remoteFileName, file.FullName, file.Length));
+                            _numberFilesdownloaded++;
+                            Console.WriteLine("Archivo descargado: [{0}]", remoteFileName);
+                            message.AppendFormat("Archivo descargado: [{0}]\n", remoteFileName);
+                        }
+                }
+            }
+            catch (Exception ex)
+            {
+                StringBuilder sb = new StringBuilder();
+                Console.WriteLine("Error downloadFile:[{0}]", ex.Message);
+                sb.AppendFormat("Error downloadFile:[{0}]", ex.Message);
                 Logger.WriteEventViewer(sb.ToString(), EventLogEntryType.Error);
             }
         }
