@@ -10,6 +10,7 @@ using System.Diagnostics;
 using System.Timers;
 using System.Configuration;
 using System.Threading;
+using System.Text.RegularExpressions;
 
 namespace MasivoProcesoNET
 {
@@ -22,10 +23,10 @@ namespace MasivoProcesoNET
         static string _remoteFolder_IMSS = string.Empty;
         static int _numberOfEntities = 0;
         static string _localStorageFolder_BAZ = string.Empty;
-        static string _backupFolder = string.Empty;
-        static int _monitoring_Frequency = 0;
         static int _numberFilesdownloaded = 0;
         static string _ftpDirectory = string.Empty;
+
+        static string _regularExpresion = string.Empty;
 
         private const int minimumFrecuency = 30000;
 
@@ -42,10 +43,10 @@ namespace MasivoProcesoNET
                 ReadConfigurationFile();
                 OnTimedEvent();
             }
-            catch (Exception ex)
+            catch (Exception exp)
             {
                 StringBuilder sb = new StringBuilder();
-                sb.AppendFormat("Error:[{0}]", ex.Message);
+                sb.AppendFormat("Error:[{0}]", exp.Message);
                 Logger.WriteEventViewer(sb.ToString(), EventLogEntryType.Error);
             }
 
@@ -67,8 +68,7 @@ namespace MasivoProcesoNET
                 _remoteFolder_IMSS = (string)ReadConfiguration("remoteFolder_IMSS", false);
                 _numberOfEntities = (Int32)ReadConfiguration("numberOfEntities", true);
                 _localStorageFolder_BAZ = (string)ReadConfiguration("localStorageFolder_BAZ", false);
-                _backupFolder = (string)ReadConfiguration("backupFolder", false);
-                _monitoring_Frequency = (Int32)ReadConfiguration("monitoring_Frequency", true);
+                _regularExpresion = (string)ReadConfiguration("RegularExpresion", false);
             }
             catch (Exception ex)
             {
@@ -122,6 +122,8 @@ namespace MasivoProcesoNET
             message.AppendLine("Numero de entidades:[" + _numberOfEntities + "]");
             Console.WriteLine("Direccion local:[{0}]", _localStorageFolder_BAZ);
             message.AppendLine("Direccion local:[" + _localStorageFolder_BAZ + "]");
+            Console.WriteLine("Expresion regular:[{0}]", _regularExpresion);
+            message.AppendLine("Expresion regular:[" + _regularExpresion + "]");
             Console.WriteLine("Buscando archivos...");
             message.AppendLine("Buscando archivos...");
             List<Thread> workerThreads = new List<Thread>();
@@ -141,32 +143,7 @@ namespace MasivoProcesoNET
                     thread.Join();
                 }
 
-                if (_numberFilesdownloaded != 0)
-                {
-                    Console.WriteLine("---Respaldo de archivos descargados---");
-                    message.AppendLine("---Respaldo de archivos descargados---");
-                    copyFiles();
-
-                    Console.WriteLine("---Renombrado de archivos descargados---");
-                    message.AppendLine("---Renombrado de archivos descargados---");
-                    foreach (ImssFile currentFile in filesDownloaded)
-                    {
-                        string newfile = Path.GetFileNameWithoutExtension(currentFile.Name) + ".cif";
-                        string tmp = string.Concat(_localStorageFolder_BAZ + newfile);
-                        if (!File.Exists(tmp))
-                        {
-                            File.Move(_localStorageFolder_BAZ + currentFile.Name, tmp);
-                            Console.Write("\tNuevo archivo renombrado[{0}].\n", tmp);
-                            message.AppendLine("\tNuevo archivo renombrado: [" + tmp + "].");
-                        }
-                        else
-                        {
-                            Console.Write("\tEl archivo ya existe: [{0}].\n", tmp);
-                            message.AppendLine("\tEl archivo ya existe: [" + tmp + "].");
-                        }
-                    }
-                }
-                else
+                if (_numberFilesdownloaded == 0)
                 {
                     Console.WriteLine("<<<< No hay archivos por descargar.>>>>");
                     message.AppendLine("<<<< No hay archivos por descargar.>>>>");
@@ -192,6 +169,8 @@ namespace MasivoProcesoNET
 
         private static void download(string currentRemoteDirectory)
         {
+            //Regex regex = new Regex(@"MXIMSS[A-Z]{2}\d{2}[A-Z]{3}-\d{7}[A-Z]{1,2}.PK7");
+            Regex regex = new Regex(_regularExpresion);
             try
             {
                 using (SftpClient sftpclient = new SftpClient(
@@ -203,7 +182,19 @@ namespace MasivoProcesoNET
                         var files = sftpclient.ListDirectory(currentRemoteDirectory);
                         foreach (var file in files)
                         {
-                            downloadFile(sftpclient, file, currentRemoteDirectory);
+                            Match match = regex.Match(file.Name);
+                            if (match.Success)
+                            {
+                                downloadFile(sftpclient, file, currentRemoteDirectory);
+                            }
+                            else
+                            {
+                                if (!file.Name.StartsWith("."))
+                                {
+                                    Console.Write("\tNombre de archivo incorrecto : [{0}]. No considerado para descarga.\n", file.Name);
+                                    message.AppendLine("\tNombre de archivo incorrecto: [" + file.Name + "]. No considerado para descarga.");
+                                }
+                            }
                         }
                         sftpclient.Disconnect();
                     }
@@ -250,35 +241,5 @@ namespace MasivoProcesoNET
             }
         }
 
-        private static void copyFiles()
-        {
-            string fileName = string.Empty;
-            string destFile = string.Empty;
-            try
-            {
-                string[] files = System.IO.Directory.GetFiles(_localStorageFolder_BAZ);
-
-                foreach (string s in files)
-                {
-                    fileName = System.IO.Path.GetFileName(s);
-                    destFile = System.IO.Path.Combine(_backupFolder, fileName);
-                    File.Copy(s, destFile, true);
-                    Console.WriteLine("\tArchivo respaldado: [{0}]", destFile);
-                    message.AppendFormat("\tArchivo respaldado: [{0}]\n", destFile);
-                }
-            }
-            catch (DirectoryNotFoundException ex)
-            {
-                Console.WriteLine("\t\nOcurrio un error al respaldar Archivo.\t\nError copyFiles: Directorio no existe[{0}]", ex.Message);
-                Logger.WriteEventViewer("\t\nOcurrio un error al respaldar Archivo.\t\nError copyFiles: Directorio no existe [" + ex.Message + "]", EventLogEntryType.Error);
-            }
-            catch (Exception exept)
-            {
-                StringBuilder sb = new StringBuilder();
-                Console.WriteLine("\t\nError copyFiles:[{0}]", exept.Message);
-                sb.AppendFormat("Error copyFiles:[{0}]", exept.Message);
-                Logger.WriteEventViewer(sb.ToString(), EventLogEntryType.Error);
-            }
-        }
     }
 }
