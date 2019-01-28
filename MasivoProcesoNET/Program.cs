@@ -29,6 +29,8 @@ namespace MasivoProcesoNET
         static string _regularExpresion = string.Empty;
 
         private const int minimumFrecuency = 30000;
+        private const string acuse = "ACUSE_";
+        private const string extensionAcuse = ".PK7";
 
         private static System.Timers.Timer aTimer;
 
@@ -133,7 +135,7 @@ namespace MasivoProcesoNET
                 for (int j = 1; j <= _numberOfEntities; j++)
                 {
                     string currentRemoteDirectory = _remoteFolder_IMSS.Replace("##", j.ToString("D2"));
-                    Thread thread = new Thread(() => download(currentRemoteDirectory));
+                    Thread thread = new Thread(() => download(currentRemoteDirectory, j));
                     workerThreads.Add(thread);
                     thread.Start();
                 }
@@ -167,9 +169,10 @@ namespace MasivoProcesoNET
             }
         }
 
-        private static void download(string currentRemoteDirectory)
+        private static void download(string currentRemoteDirectory, int delegation)
         {
             //Regex regex = new Regex(@"MXIMSS[A-Z]{2}\d{2}[A-Z]{3}-\d{7}[A-Z]{1,2}.PK7");
+            UnicodeEncoding uniEncoding = new UnicodeEncoding();
             Regex regex = new Regex(_regularExpresion);
             try
             {
@@ -185,14 +188,37 @@ namespace MasivoProcesoNET
                             Match match = regex.Match(file.Name);
                             if (match.Success)
                             {
-                                downloadFile(sftpclient, file, currentRemoteDirectory);
+                                if(file.Length != 0)
+                                    downloadFile(sftpclient, file, currentRemoteDirectory);
+                                else
+                                {
+                                    byte[] errorMessage = uniEncoding.GetBytes(
+                                        string.Format("Archivo [{0}] en 0 KB.\n", file.Name)
+                                        );
+
+                                    var newfile = string.Format("{0}{1}{2}",acuse, file.Name,extensionAcuse);
+                                    var acuseRemoteDirectory = currentRemoteDirectory.Replace("pago", "acuse");
+
+                                    createFileResponse(sftpclient, newfile , acuseRemoteDirectory, errorMessage, message);
+                                    Console.WriteLine("\tDebido al tamaño del archivo 0 KB, Se genero archivo de respuesta automatico.\n\t>>>>[" + acuseRemoteDirectory + newfile + "]");
+                                    message.AppendLine("\tDebido al tamaño del archivo 0 KB, Se genero archivo de respuesta automatico.\n\t>>>>[" + acuseRemoteDirectory + newfile + "]");
+                                }
                             }
                             else
                             {
                                 if (!file.Name.StartsWith("."))
                                 {
-                                    Console.Write("\tNombre de archivo incorrecto : [{0}]. No considerado para descarga.\n", file.Name);
-                                    message.AppendLine("\tNombre de archivo incorrecto: [" + file.Name + "]. No considerado para descarga.");
+                                    byte[] errorMessage = uniEncoding.GetBytes(
+                                        string.Format("El archivo [{0}] no cumple con estructura definida.\n", file.Name)
+                                        );
+
+                                    var newfile = string.Format("{0}{1}{2}", acuse, file.Name, extensionAcuse);
+                                    var acuseRemoteDirectory = currentRemoteDirectory.Replace("pago", "acuse");
+
+                                    createFileResponse(sftpclient, newfile, acuseRemoteDirectory, errorMessage, message);
+
+                                    Console.WriteLine("\tSe genero archivo de respuesta automatico por no cumplir con la estructura definida.\n\t>>>>[" + acuseRemoteDirectory + newfile+"]");
+                                    message.AppendLine("\tSe genero archivo de respuesta automatico por no cumplir con la estructura definida.\n\t>>>>[" + acuseRemoteDirectory + newfile + "]");
                                 }
                             }
                         }
@@ -212,6 +238,7 @@ namespace MasivoProcesoNET
                 sb.AppendFormat("Error download:[{0}]", exp.Message);
                 Logger.WriteEventViewer(sb.ToString(), EventLogEntryType.Error);
             }
+
         }
 
         private static void downloadFile(SftpClient sftpclient, SftpFile file, string currentRemoteDirectory)
@@ -241,5 +268,31 @@ namespace MasivoProcesoNET
             }
         }
 
+        static bool createFileResponse(SftpClient sftpclient, string nameFileWithExtension, string pathResponse, byte[] message,StringBuilder mainMessageInformation)
+        {
+            bool successful = true;
+
+            try
+            {
+                sftpclient.ChangeDirectory(pathResponse);
+
+                using (var stream = new MemoryStream())
+                {
+                    var writer = new StreamWriter(stream);
+
+                    stream.Write(message, 0, message.Length);
+                    stream.Position = 0;
+
+                    sftpclient.UploadFile(stream, nameFileWithExtension);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("createFileResponse Error[{0}]", ex.Message);
+                mainMessageInformation.AppendLine("createFileResponse Error["+ex.Message+"]");
+                successful = false;
+            }
+            return successful;
+        }
     }
 }
