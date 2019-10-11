@@ -31,6 +31,8 @@ namespace MasivoProcesoNET
         static EventLogEntryType BeforeDownloadEntryType = EventLogEntryType.Information;
         static EventLogEntryType EventLogEntryTypeForMessage = EventLogEntryType.Information;
 
+        static bool errorInThread = false;
+
         private const int minimumFrecuency = 30000;
         private const string acuse = "ACUSE_";
         private const string extensionAcuse = ".PK7";
@@ -171,6 +173,12 @@ namespace MasivoProcesoNET
                     thread.Join();
                 }
 
+                //Utilizado para validación si ocurrio en error en alguno de los hilos.
+                if (errorInThread)
+                {
+                    successful = -1;
+                }
+
                 if (_numberFilesdownloaded == 0)
                 {
                     Console.WriteLine("<<<< No hay archivos por descargar.>>>>");
@@ -197,6 +205,7 @@ namespace MasivoProcesoNET
             {
                 Console.WriteLine("¡¡Terminó validación!!");
                 message.AppendLine("¡¡Terminó validación!!");
+                message.AppendLine($"RESULT[{successful}]");
                 Logger.WriteEventViewer(logBeforeDownload_totalFilesFound.ToString(), BeforeDownloadEntryType);
                 Logger.WriteEventViewer(message.ToString(), EventLogEntryTypeForMessage);
                 filesDownloaded.Clear();
@@ -280,7 +289,7 @@ namespace MasivoProcesoNET
                             Match match = regex.Match(file.Name);
                             if (match.Success)
                             {
-                                if(file.Length != 0)
+                                if (file.Length != 0)
                                     downloadFile(sftpclient, file, currentRemoteDirectory);
                                 else
                                 {
@@ -331,8 +340,13 @@ namespace MasivoProcesoNET
             {
                 StringBuilder sb = new StringBuilder();
                 Console.WriteLine("Error download:[{0}]", exp.Message);
+                Console.WriteLine("HResult[{0}]", exp.HResult);
+                Console.WriteLine("StackTrace[{0}]", exp.StackTrace);
                 sb.AppendFormat("Error download:[{0}]", exp.Message);
+                sb.AppendFormat("\nHResult:[{0}]", exp.HResult);
+                sb.AppendFormat("\nStackTrace:[{0}]", exp.StackTrace);
                 Logger.WriteEventViewer(sb.ToString(), EventLogEntryType.Error);
+                errorInThread = true;
             }
 
         }
@@ -361,6 +375,7 @@ namespace MasivoProcesoNET
                 Console.WriteLine("Error downloadFile:[{0}]", ex.Message);
                 sb.AppendFormat("Error downloadFile:[{0}]", ex.Message);
                 Logger.WriteEventViewer(sb.ToString(), EventLogEntryType.Error);
+                errorInThread = true;
             }
         }
 
